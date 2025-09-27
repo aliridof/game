@@ -1,0 +1,15 @@
+@media (max-width: 1024px) {
+    .categories-horizontal {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .history-sections {
+        grid-template-columns: 1fr;
+    }
+
+    .hot-content {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Tambahkan semua media queries di sini */
