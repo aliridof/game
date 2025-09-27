@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KEMANTRAN</title>
+    <title>Roulette Tracker - Kategori</title>
     <style>
         * {
             margin: 0;
@@ -521,7 +521,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎯 KEMANTRAN</h1>
+            <h1>🎯 Roulette Tracker</h1>
             <div class="current-number" id="currentNumber">--</div>
         </div>
 
@@ -688,4 +688,485 @@
                 <div class="vertical-history" id="verticalHistory">
                     <!-- Vertical history akan diisi oleh JavaScript -->
                 </div>
-                <div class="h
+                <div class="history-counter" id="verticalCounter">Total: 0 numbers</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data roulette
+        const rouletteData = {
+            redNumbers: [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36],
+            blackNumbers: [2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35],
+            
+            columns: {
+                c1: [1,4,7,10,13,16,19,22,25,28,31,34],
+                c2: [2,5,8,11,14,17,20,23,26,29,32,35],
+                c3: [3,6,9,12,15,18,21,24,27,30,33,36]
+            },
+            
+            dozens: {
+                d1: [1,2,3,4,5,6,7,8,9,10,11,12],
+                d2: [13,14,15,16,17,18,19,20,21,22,23,24],
+                d3: [25,26,27,28,29,30,31,32,33,34,35,36]
+            }
+        };
+
+        // State aplikasi
+        let streaks = {
+            d0: 0, d1: 0, d2: 0, d3: 0,
+            c0: 0, c1: 0, c2: 0, c3: 0,
+            zeroSize: 0, small: 0, big: 0,
+            zeroParity: 0, even: 0, odd: 0,
+            zeroColor: 0, red: 0, black: 0
+        };
+
+        let currentNumber = null;
+        let history = [];
+        let undoStack = [];
+        const MAX_UNDO = 5;
+
+        // Mapping kategori untuk HOT display
+        const categoryMapping = {
+            d0: { group: 'DOZEN', label: 'D0' },
+            d1: { group: 'DOZEN', label: 'D1' },
+            d2: { group: 'DOZEN', label: 'D2' },
+            d3: { group: 'DOZEN', label: 'D3' },
+            c0: { group: 'COLUMN', label: 'C0' },
+            c1: { group: 'COLUMN', label: 'C1' },
+            c2: { group: 'COLUMN', label: 'C2' },
+            c3: { group: 'COLUMN', label: 'C3' },
+            zeroSize: { group: 'BESAR-KECIL', label: 'ZERO' },
+            small: { group: 'BESAR-KECIL', label: 'SMALL' },
+            big: { group: 'BESAR-KECIL', label: 'BIG' },
+            zeroParity: { group: 'GANJIL-GENAP', label: 'ZERO' },
+            even: { group: 'GANJIL-GENAP', label: 'EVEN' },
+            odd: { group: 'GANJIL-GENAP', label: 'ODD' },
+            zeroColor: { group: 'HITAM-MERAH', label: 'ZERO' },
+            red: { group: 'HITAM-MERAH', label: 'RED' },
+            black: { group: 'HITAM-MERAH', label: 'BLACK' }
+        };
+
+        // Update HOT Categories
+        function updateHotCategories() {
+            const hotContent = document.getElementById('hotContent');
+            const noHotCategories = document.getElementById('noHotCategories');
+            
+            // Filter categories dengan streak > 5
+            const hotCategories = {};
+            for (const [key, value] of Object.entries(streaks)) {
+                if (value > 5) {
+                    const mapping = categoryMapping[key];
+                    if (!hotCategories[mapping.group]) {
+                        hotCategories[mapping.group] = [];
+                    }
+                    hotCategories[mapping.group].push({
+                        label: mapping.label,
+                        value: value
+                    });
+                }
+            }
+
+            // Clear content
+            hotContent.innerHTML = '';
+
+            if (Object.keys(hotCategories).length === 0) {
+                // Tidak ada kategori HOT
+                hotContent.appendChild(noHotCategories);
+            } else {
+                // Ada kategori HOT
+                for (const [groupName, items] of Object.entries(hotCategories)) {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'hot-category-group';
+                    
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'hot-category-title';
+                    titleDiv.textContent = groupName;
+                    
+                    const itemsDiv = document.createElement('div');
+                    itemsDiv.className = 'hot-category-items';
+                    
+                    items.forEach(item => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'hot-item';
+                        
+                        const labelSpan = document.createElement('span');
+                        labelSpan.className = 'hot-item-label';
+                        
+                        // Add bullet for categories
+                        if (item.label === 'RED') {
+                            const bullet = document.createElement('span');
+                            bullet.className = 'bullet bullet-red';
+                            labelSpan.appendChild(bullet);
+                        } else if (item.label === 'BLACK') {
+                            const bullet = document.createElement('span');
+                            bullet.className = 'bullet bullet-black';
+                            labelSpan.appendChild(bullet);
+                        } else if (item.label === 'ZERO' || item.label === 'D0' || item.label === 'C0') {
+                            const bullet = document.createElement('span');
+                            bullet.className = 'bullet bullet-green';
+                            labelSpan.appendChild(bullet);
+                        }
+                        
+                        labelSpan.appendChild(document.createTextNode(item.label));
+                        
+                        const valueSpan = document.createElement('span');
+                        valueSpan.className = 'hot-item-value';
+                        valueSpan.textContent = item.value.toString().padStart(2, '0');
+                        
+                        itemDiv.appendChild(labelSpan);
+                        itemDiv.appendChild(valueSpan);
+                        itemsDiv.appendChild(itemDiv);
+                    });
+                    
+                    groupDiv.appendChild(titleDiv);
+                    groupDiv.appendChild(itemsDiv);
+                    hotContent.appendChild(groupDiv);
+                }
+            }
+        }
+
+        // Fungsi untuk menyimpan state saat ini untuk undo
+        function saveStateForUndo() {
+            if (undoStack.length >= MAX_UNDO) {
+                undoStack.shift(); // Hapus state paling lama jika sudah mencapai batas
+            }
+            
+            undoStack.push({
+                streaks: {...streaks},
+                currentNumber: currentNumber,
+                history: [...history]
+            });
+            
+            updateUndoButton();
+        }
+
+        // Fungsi undo
+        function undo() {
+            if (undoStack.length === 0) return;
+            
+            const previousState = undoStack.pop();
+            
+            streaks = {...previousState.streaks};
+            currentNumber = previousState.currentNumber;
+            history = [...previousState.history];
+            
+            updateDisplay();
+            updateHistory();
+            updateHotCategories();
+            updateUndoButton();
+        }
+
+        // Update tombol undo
+        function updateUndoButton() {
+            const undoBtn = document.getElementById('undoBtn');
+            const undoCounter = document.getElementById('undoCounter');
+            
+            undoBtn.disabled = undoStack.length === 0;
+            undoCounter.textContent = `↩️ ${undoStack.length}/${MAX_UNDO}`;
+            
+            if (undoStack.length === 0) {
+                undoCounter.style.background = '#bdc3c7';
+            } else {
+                undoCounter.style.background = '#34495e';
+            }
+        }
+
+        // Fungsi untuk mendapatkan kategori dari angka
+        function getNumberCategories(number) {
+            return {
+                dozen: getDozen(number),
+                column: getColumn(number),
+                size: getSize(number),
+                parity: getParity(number),
+                color: getColor(number)
+            };
+        }
+
+        function getDozen(number) {
+            if (number === 00) return 'D0';
+            if (number === 0) return 'D0';
+            if (number >= 1 && number <= 12) return 'D1';
+            if (number >= 13 && number <= 24) return 'D2';
+            if (number >= 25 && number <= 36) return 'D3';
+            return '-';
+        }
+
+        function getColumn(number) {
+            if (number === 0) return 'C0';
+            if (number === 00) return 'C0';
+            if (rouletteData.columns.c1.includes(number)) return 'C1';
+            if (rouletteData.columns.c2.includes(number)) return 'C2';
+            if (rouletteData.columns.c3.includes(number)) return 'C3';
+            return '-';
+        }
+
+        function getSize(number) {
+            if (number === 0 || number === 00) return 'ZERO';
+            if (number >= 1 && number <= 18) return 'SMALL';
+            if (number >= 19 && number <= 36) return 'BIG';
+            return '-';
+        }
+
+        function getParity(number) {
+            if (number === 0 || number === 00) return 'ZERO';
+            if (number % 2 === 0) return 'EVEN';
+            return 'ODD';
+        }
+
+        function getColor(number) {
+            if (number === 0 || number === 00) return 'ZERO';
+            if (rouletteData.redNumbers.includes(number)) return 'RED';
+            return 'BLACK';
+        }
+
+        // Tambah angka baru
+        function addNumber(number = null) {
+            let inputNumber = number;
+            
+            if (!inputNumber) {
+                inputNumber = document.getElementById('numberInput').value;
+                if (inputNumber === '00') inputNumber = 00;
+                else inputNumber = parseInt(inputNumber);
+            }
+
+            if (isNaN(inputNumber) && inputNumber !== 00) {
+                alert('Masukkan angka yang valid!');
+                return;
+            }
+
+            if (inputNumber !== 00 && (inputNumber < 0 || inputNumber > 36)) {
+                alert('Angka harus antara 0-36 atau 00!');
+                return;
+            }
+
+            // Simpan state sebelum perubahan untuk undo
+            saveStateForUndo();
+            
+            processNumber(inputNumber);
+            document.getElementById('numberInput').value = '';
+        }
+
+        function processNumber(number) {
+            const categories = getNumberCategories(number);
+            currentNumber = number;
+            
+            // Simpan data lengkap termasuk kategori
+            history.unshift({
+                number: number,
+                categories: categories,
+                timestamp: new Date().toLocaleTimeString()
+            });
+            
+            if (history.length > 100) history.pop();
+
+            updateStreaks(number);
+            updateDisplay();
+            updateHistory();
+            updateHotCategories();
+        }
+
+        function updateStreaks(number) {
+            for (let key in streaks) {
+                if (containsNumber(key, number)) {
+                    streaks[key] = 0;
+                } else {
+                    streaks[key]++;
+                }
+            }
+        }
+
+        function containsNumber(category, number) {
+            switch(category) {
+                case 'd0': return number === 00;
+                case 'd1': return rouletteData.dozens.d1.includes(number);
+                case 'd2': return rouletteData.dozens.d2.includes(number);
+                case 'd3': return rouletteData.dozens.d3.includes(number);
+                case 'c0': return number === 0;
+                case 'c1': return rouletteData.columns.c1.includes(number);
+                case 'c2': return rouletteData.columns.c2.includes(number);
+                case 'c3': return rouletteData.columns.c3.includes(number);
+                case 'zeroSize': return number === 00 || number === 0;
+                case 'small': return number > 0 && number <= 18;
+                case 'big': return number >= 19 && number <= 36;
+                case 'zeroParity': return number === 00 || number === 0;
+                case 'even': return number !== 00 && number !== 0 && number % 2 === 0;
+                case 'odd': return number !== 00 && number !== 0 && number % 2 === 1;
+                case 'zeroColor': return number === 00 || number === 0;
+                case 'red': return rouletteData.redNumbers.includes(number);
+                case 'black': return rouletteData.blackNumbers.includes(number);
+                default: return false;
+            }
+        }
+
+        function updateDisplay() {
+            document.getElementById('currentNumber').textContent = 
+                currentNumber === 00 ? '00' : (currentNumber || '--');
+
+            updateStreakValue('d0', streaks.d0);
+            updateStreakValue('d1', streaks.d1);
+            updateStreakValue('d2', streaks.d2);
+            updateStreakValue('d3', streaks.d3);
+            updateStreakValue('c0', streaks.c0);
+            updateStreakValue('c1', streaks.c1);
+            updateStreakValue('c2', streaks.c2);
+            updateStreakValue('c3', streaks.c3);
+            updateStreakValue('zero-size', streaks.zeroSize);
+            updateStreakValue('small', streaks.small);
+            updateStreakValue('big', streaks.big);
+            updateStreakValue('zero-parity', streaks.zeroParity);
+            updateStreakValue('even', streaks.even);
+            updateStreakValue('odd', streaks.odd);
+            updateStreakValue('zero-color', streaks.zeroColor);
+            updateStreakValue('red', streaks.red);
+            updateStreakValue('black', streaks.black);
+        }
+
+        function updateStreakValue(id, value) {
+            const element = document.getElementById(id + '-value');
+            if (element) {
+                const formattedValue = value.toString().padStart(2, '0');
+                element.textContent = formattedValue;
+                
+                element.classList.remove('streak-normal', 'streak-medium', 'streak-high');
+                
+                if (value > 10) {
+                    element.classList.add('streak-high');
+                } else if (value > 5) {
+                    element.classList.add('streak-medium');
+                } else {
+                    element.classList.add('streak-normal');
+                }
+            }
+        }
+
+        function updateHistory() {
+            updateGridHistory();
+            updateVerticalHistory();
+        }
+
+        function updateGridHistory() {
+            const container = document.getElementById('historyGrid');
+            const counter = document.getElementById('gridCounter');
+            container.innerHTML = '';
+
+            history.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'history-number';
+                div.textContent = item.number === 00 ? '00' : item.number;
+                div.title = `#${history.length - index}: ${item.number === 00 ? '00' : item.number}`;
+
+                if (item.number === 0 || item.number === 00) {
+                    div.style.background = '#27ae60';
+                } else if (rouletteData.redNumbers.includes(item.number)) {
+                    div.style.background = '#e74c3c';
+                } else {
+                    div.style.background = '#2c3e50';
+                }
+
+                container.appendChild(div);
+            });
+
+            counter.textContent = `Total: ${history.length} numbers`;
+        }
+
+        function updateVerticalHistory() {
+            const container = document.getElementById('verticalHistory');
+            const counter = document.getElementById('verticalCounter');
+            container.innerHTML = '';
+
+            history.forEach((item, index) => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+
+                // Number circle
+                const numberCircle = document.createElement('div');
+                numberCircle.className = 'history-number-large';
+                numberCircle.textContent = item.number === 00 ? '00' : item.number;
+                
+                if (item.number === 0 || item.number === 00) {
+                    numberCircle.style.background = '#27ae60';
+                } else if (rouletteData.redNumbers.includes(item.number)) {
+                    numberCircle.style.background = '#e74c3c';
+                } else {
+                    numberCircle.style.background = '#2c3e50';
+                }
+
+                // Details
+                const details = document.createElement('div');
+                details.className = 'history-details';
+
+                const detailsHTML = `
+                    <div class="history-detail-item">
+                        <span class="history-detail-label">DOZEN:</span>
+                        <span class="history-detail-value">${item.categories.dozen}</span>
+                    </div>
+                    <div class="history-detail-item">
+                        <span class="history-detail-label">COLUMN:</span>
+                        <span class="history-detail-value">${item.categories.column}</span>
+                    </div>
+                    <div class="history-detail-item">
+                        <span class="history-detail-label">BESAR-KECIL:</span>
+                        <span class="history-detail-value">${item.categories.size}</span>
+                    </div>
+                    <div class="history-detail-item">
+                        <span class="history-detail-label">GANJIL-GENAP:</span>
+                        <span class="history-detail-value">${item.categories.parity}</span>
+                    </div>
+                    <div class="history-detail-item">
+                        <span class="history-detail-label">HITAM-MERAH:</span>
+                        <span class="history-detail-value">
+                            ${item.categories.color === 'RED' ? '<span class="bullet bullet-red"></span>' : ''}
+                            ${item.categories.color === 'BLACK' ? '<span class="bullet bullet-black"></span>' : ''}
+                            ${item.categories.color === 'ZERO' ? '<span class="bullet bullet-green"></span>' : ''}
+                            ${item.categories.color}
+                        </span>
+                    </div>
+                `;
+
+                details.innerHTML = detailsHTML;
+
+                historyItem.appendChild(numberCircle);
+                historyItem.appendChild(details);
+                container.appendChild(historyItem);
+            });
+
+            counter.textContent = `Total: ${history.length} numbers`;
+        }
+
+        function resetAll() {
+            if (!confirm('Reset semua streak, history, dan undo stack?')) return;
+
+            // Simpan state sebelum reset untuk undo
+            saveStateForUndo();
+            
+            for (let key in streaks) {
+                streaks[key] = 0;
+            }
+            currentNumber = null;
+            history = [];
+            // Jangan reset undo stack saat reset all, biarkan user bisa undo reset
+            updateDisplay();
+            updateHistory();
+            updateHotCategories();
+            document.getElementById('currentNumber').textContent = '--';
+        }
+
+        // Event listener untuk Enter key
+        document.getElementById('numberInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addNumber();
+            }
+        });
+
+        // Event listener untuk Ctrl+Z (undo shortcut)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                undo();
+            }
+        });
+
+    </script>
+</body>
+</html>
